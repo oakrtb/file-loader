@@ -1,0 +1,2 @@
+com.oakrtb.file.loader.spring.FileLoaderAutoConfiguration
+com.oakrtb.file.loader.spring.FileLoaderPrometheusAutoConfiguration

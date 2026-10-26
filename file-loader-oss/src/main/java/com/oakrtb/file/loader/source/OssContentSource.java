@@ -85,9 +85,6 @@ public final class OssContentSource implements ContentSource, AutoCloseable {
     @Override
     public Optional<ContentMeta> meta(ContentRef ref) throws IOException {
         try {
-            if (!client.doesObjectExist(config.bucket(), ref.getPath())) {
-                return Optional.empty();
-            }
             ObjectMetadata metadata = client.getObjectMetadata(config.bucket(), ref.getPath());
             return Optional.of(toMeta(metadata));
         } catch (OSSException e) {

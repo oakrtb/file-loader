@@ -1,6 +1,7 @@
 package com.oakrtb.file.loader.source;
 
 import com.aliyun.oss.OSS;
+import com.aliyun.oss.OSSException;
 import com.aliyun.oss.model.ListObjectsRequest;
 import com.aliyun.oss.model.OSSObject;
 import com.aliyun.oss.model.OSSObjectSummary;
@@ -23,6 +24,8 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -46,7 +49,6 @@ class OssContentSourceTest {
         listing.getObjectSummaries().add(summary);
         when(client.listObjects(any(ListObjectsRequest.class))).thenReturn(listing);
 
-        when(client.doesObjectExist("bucket", "conf/a.txt")).thenReturn(true);
         ObjectMetadata metadata = org.mockito.Mockito.mock(ObjectMetadata.class);
         when(metadata.getETag()).thenReturn("\"etag-1\"");
         when(metadata.getLastModified()).thenReturn(new Date(1_700_000_000_000L));
@@ -76,7 +78,20 @@ class OssContentSourceTest {
         verify(client).listObjects(captor.capture());
         assertEquals("bucket", captor.getValue().getBucketName());
         assertEquals("conf/", captor.getValue().getPrefix());
+        verify(client, never()).doesObjectExist(anyString(), anyString());
         verify(client).shutdown();
+    }
+
+    @Test
+    void metaReturnsEmptyOnNoSuchKey() throws Exception {
+        ObjectStoreConfig config = ObjectStoreConfig.oss("https://oss.example", "ak", "sk", "bucket");
+        when(client.getObjectMetadata("bucket", "missing.txt"))
+                .thenThrow(new OSSException("missing", "NoSuchKey", "req", "host", null, null, null));
+
+        try (OssContentSource source = new OssContentSource(config, client)) {
+            assertTrue(source.meta(new ContentRef("missing.txt")).isEmpty());
+        }
+        verify(client, never()).doesObjectExist(anyString(), anyString());
     }
 
     @Test

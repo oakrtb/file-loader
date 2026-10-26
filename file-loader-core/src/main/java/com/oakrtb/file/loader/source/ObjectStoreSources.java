@@ -11,7 +11,11 @@ import java.util.ServiceLoader;
 /**
  * Resolves object-store {@link ContentSource} via {@link ServiceLoader}.
  * Requires {@code file-loader-oss} / {@code file-loader-tos} (or custom factories) on the classpath.
- * Applies {@link RetryingContentSource} using {@link ObjectStoreConfig#clientOptions()}.
+ * Applies {@link RetryingContentSource} using the caller's {@link ObjectStoreConfig#clientOptions()}.
+ *
+ * <p>The factory is given {@code maxAttempts == 1}. OSS/TOS SDK clients derive their own retry
+ * count from that value, so a direct {@code new OssContentSource} / {@code new TosContentSource}
+ * still retries, while this path does not stack SDK retries on top of {@link RetryingContentSource}.
  */
 public final class ObjectStoreSources {
 
@@ -26,8 +30,30 @@ public final class ObjectStoreSources {
                 .orElseThrow(() -> new IllegalStateException(
                         "No ObjectStoreSourceFactory for type='" + normalized
                                 + "'. Add file-loader-oss / file-loader-tos (or a custom factory) to the classpath."))
-                .create(config);
+                .create(singleSdkAttempt(config));
         return RetryingContentSource.wrap(source, config.clientOptions());
+    }
+
+    /**
+     * One HTTP try inside the SDK. Timeouts and backoff stay; the wrapper owns the attempt budget.
+     */
+    static ObjectStoreConfig singleSdkAttempt(ObjectStoreConfig config) {
+        ObjectStoreClientOptions opts = config.clientOptions();
+        if (opts.maxAttempts() == 1) {
+            return config;
+        }
+        ObjectStoreClientOptions once = new ObjectStoreClientOptions(
+                opts.connectTimeoutMs(),
+                opts.socketTimeoutMs(),
+                1,
+                opts.retryBackoffMs());
+        return new ObjectStoreConfig(
+                config.endpoint(),
+                config.accessKey(),
+                config.accessSecret(),
+                config.bucket(),
+                config.region(),
+                once);
     }
 
     public static ContentSource oss(ObjectStoreConfig config) {
